@@ -1,157 +1,108 @@
 import SwiftUI
 import AVFoundation
 import Vision
+import MultipeerConnectivity
+import CoreLocation
+import MediaPlayer
+
+// MARK: - Notification Extension for Volume Change
+extension Notification.Name {
+    static let volumeDidChange = Notification.Name("AVSystemController_SystemVolumeDidChangeNotification")
+}
 
 struct ContentView: View {
-    @StateObject private var cameraViewModel = CameraViewModel()
-
+    @StateObject private var gameManager = GameManager()
+    
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                CameraView(cameraViewModel: cameraViewModel)
+                // Camera preview
+                CameraView(cameraViewModel: gameManager.cameraViewModel)
                     .edgesIgnoringSafeArea(.all)
-
+                
+                // Overlays: Scoreboard, Pair Button, and Fire Button
                 VStack {
-                    Spacer()
-                    Text(cameraViewModel.personDetected ? "👤 Person Detected" : "No Person")
-                        .padding()
-                        .background(cameraViewModel.personDetected ? Color.green : Color.red)
+                    HStack {
+                        Button("Pair") {
+                            gameManager.isShowingPairing = true
+                        }
+                        .padding(8)
+                        .background(Color.blue.opacity(0.8))
                         .foregroundColor(.white)
                         .clipShape(Capsule())
-                        .padding()
+                        
+                        Spacer()
+                        
+                        VStack(alignment: .trailing) {
+                            Text("Strikes: \(gameManager.strikesGiven)")
+                            Text("Hits: \(gameManager.hitsReceived)")
+                        }
+                        .padding(8)
+                        .background(Color.black.opacity(0.6))
+                        .foregroundColor(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .padding()
+                    
+                    Spacer()
+                    
+                    // Fire button
+                    Button("Fire") {
+                        gameManager.fireButtonPressed()
+                    }
+                    .padding()
+                    .background(Color.red)
+                    .foregroundColor(.white)
+                    .clipShape(Capsule())
+                    .padding(.bottom, 20)
+                    
+                    // Status message
+                    Text(gameManager.cameraViewModel.personDetected ? "👤 Person Detected" : "No Person")
+                        .padding(8)
+                        .background(gameManager.cameraViewModel.personDetected ? Color.green : Color.red)
+                        .foregroundColor(.white)
+                        .clipShape(Capsule())
+                        .padding(.bottom, 40)
                 }
-                .frame(width: geometry.size.width)
+                
+                // Hit marker overlay – shows a red "X" for 1 second.
+                if let hitBox = gameManager.cameraViewModel.hitBoundingBox {
+                    GeometryReader { geo in
+                        let frame = CGRect(x: hitBox.minX * geo.size.width,
+                                           y: (1 - hitBox.maxY) * geo.size.height,
+                                           width: hitBox.width * geo.size.width,
+                                           height: hitBox.height * geo.size.height)
+                        Text("X")
+                            .font(.system(size: min(frame.width, frame.height) * 2, weight: .bold))
+                            .foregroundColor(.red)
+                            .frame(width: frame.width, height: frame.height)
+                            .position(x: frame.midX, y: frame.midY)
+                    }
+                }
             }
             .onAppear {
-                UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-                cameraViewModel.checkPermissions()
-                cameraViewModel.startSession()
+                gameManager.startGameSession()
             }
             .onDisappear {
-                UIDevice.current.endGeneratingDeviceOrientationNotifications()
-                cameraViewModel.stopSession()
+                gameManager.stopGameSession()
             }
-        }
-    }
-}
-
-final class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate {
-    let session = AVCaptureSession()
-    private let queue = DispatchQueue(label: "CameraQueue")
-
-    @Published var personDetected = false
-    @Published var currentOrientation: UIDeviceOrientation = .portrait
-
-    override init() {
-        super.init()
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(orientationChanged),
-            name: UIDevice.orientationDidChangeNotification,
-            object: nil
-        )
-    }
-
-    @objc private func orientationChanged() {
-        currentOrientation = UIDevice.current.orientation
-    }
-
-    func checkPermissions() {
-        switch AVCaptureDevice.authorizationStatus(for: .video) {
-        case .authorized:
-            break
-        case .notDetermined:
-            AVCaptureDevice.requestAccess(for: .video) { granted in
-                if granted {
-                    self.startSession()
-                }
+            // Present pairing UI.
+            .sheet(isPresented: $gameManager.isShowingPairing) {
+                PairingView(connectivityManager: gameManager.connectivityManager)
             }
-        default:
-            break
-        }
-    }
-
-    func startSession() {
-        session.beginConfiguration()
-
-        guard let camera = AVCaptureDevice.default(for: .video),
-              let input = try? AVCaptureDeviceInput(device: camera),
-              session.canAddInput(input) else { return }
-
-        session.addInput(input)
-
-        let output = AVCaptureVideoDataOutput()
-        output.setSampleBufferDelegate(self, queue: queue)
-
-        guard session.canAddOutput(output) else { return }
-        session.addOutput(output)
-
-        session.commitConfiguration()
-        session.startRunning()
-    }
-
-    func stopSession() {
-        session.stopRunning()
-    }
-
-    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-
-        let request = VNDetectHumanRectanglesRequest { [weak self] request, error in
-            guard let results = request.results as? [VNHumanObservation] else { return }
-
-            DispatchQueue.main.async {
-                self?.personDetected = !results.isEmpty
+            // Alert for incoming invitations.
+            .alert(item: $gameManager.connectivityManager.invitationRequest) { invitation in
+                Alert(title: Text("Invitation"),
+                      message: Text("Accept invitation from \(invitation.peerID.displayName)?"),
+                      primaryButton: .default(Text("Accept")) {
+                        invitation.invitationHandler(true, gameManager.connectivityManager.session)
+                        gameManager.connectivityManager.invitationRequest = nil
+                      },
+                      secondaryButton: .cancel {
+                        invitation.invitationHandler(false, nil)
+                        gameManager.connectivityManager.invitationRequest = nil
+                      })
             }
-        }
-
-        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
-        try? handler.perform([request])
-    }
-}
-
-struct CameraView: UIViewRepresentable {
-    @ObservedObject var cameraViewModel: CameraViewModel
-
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: UIScreen.main.bounds)
-
-        let previewLayer = AVCaptureVideoPreviewLayer(session: cameraViewModel.session)
-        previewLayer.videoGravity = .resizeAspectFill
-        previewLayer.frame = view.bounds
-        view.layer.addSublayer(previewLayer)
-
-        context.coordinator.previewLayer = previewLayer
-
-        return view
-    }
-
-    func updateUIView(_ uiView: UIView, context: Context) {
-        context.coordinator.previewLayer?.frame = uiView.bounds
-
-        // Update preview orientation
-        if let connection = context.coordinator.previewLayer?.connection,
-           connection.isVideoOrientationSupported {
-
-            let orientation = cameraViewModel.currentOrientation
-            connection.videoOrientation = videoOrientation(from: orientation)
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    class Coordinator {
-        var previewLayer: AVCaptureVideoPreviewLayer?
-    }
-
-    private func videoOrientation(from deviceOrientation: UIDeviceOrientation) -> AVCaptureVideoOrientation {
-        switch deviceOrientation {
-        case .landscapeLeft: return .landscapeRight
-        case .landscapeRight: return .landscapeLeft
-        case .portraitUpsideDown: return .portraitUpsideDown
-        default: return .portrait
         }
     }
 }

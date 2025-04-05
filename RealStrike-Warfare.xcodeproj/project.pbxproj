@@ -6,13 +6,31 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		0498943C2DA1E10400E5CD34 /* ConnectivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0498943B2DA1E10400E5CD34 /* ConnectivityManager.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		049894202DA0F16200E5CD34 /* RealStrike-Warfare.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "RealStrike-Warfare.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		0498943B2DA1E10400E5CD34 /* ConnectivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		049894322DA1926F00E5CD34 /* Exceptions for "RealStrike-Warfare" folder in "RealStrike-Warfare" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 0498941F2DA0F16200E5CD34 /* RealStrike-Warfare */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		049894222DA0F16200E5CD34 /* RealStrike-Warfare */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				049894322DA1926F00E5CD34 /* Exceptions for "RealStrike-Warfare" folder in "RealStrike-Warfare" target */,
+			);
 			path = "RealStrike-Warfare";
 			sourceTree = "<group>";
 		};
@@ -32,6 +50,7 @@
 		049894172DA0F16200E5CD34 = {
 			isa = PBXGroup;
 			children = (
+				0498943B2DA1E10400E5CD34 /* ConnectivityManager.swift */,
 				049894222DA0F16200E5CD34 /* RealStrike-Warfare */,
 				049894212DA0F16200E5CD34 /* Products */,
 			);
@@ -119,6 +138,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0498943C2DA1E10400E5CD34 /* ConnectivityManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -255,7 +275,13 @@
 				DEVELOPMENT_TEAM = F8A5YKCK62;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "RealStrike-Warfare/Info.plist";
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app uses Bluetooth to connect to nearby devices for multiplayer gameplay.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need access to the camera to detect people in real-time";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app uses the local network to discover and connect to nearby devices for multiplayer gameplay.";
+				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "Location is needed to find nearby players";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location is needed to find nearby players";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -285,7 +311,13 @@
 				DEVELOPMENT_TEAM = F8A5YKCK62;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "RealStrike-Warfare/Info.plist";
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app uses Bluetooth to connect to nearby devices for multiplayer gameplay.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need access to the camera to detect people in real-time";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app uses the local network to discover and connect to nearby devices for multiplayer gameplay.";
+				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "Location is needed to find nearby players";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Location is needed to find nearby players";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
