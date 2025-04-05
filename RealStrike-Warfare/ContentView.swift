@@ -6,35 +6,55 @@ struct ContentView: View {
     @StateObject private var cameraViewModel = CameraViewModel()
 
     var body: some View {
-        ZStack {
-            CameraView(cameraViewModel: cameraViewModel)
-                .edgesIgnoringSafeArea(.all)
+        GeometryReader { geometry in
+            ZStack {
+                CameraView(cameraViewModel: cameraViewModel)
+                    .edgesIgnoringSafeArea(.all)
 
-            VStack {
-                Spacer()
-                Text(cameraViewModel.personDetected ? "👤 Person Detected" : "No Person")
-                    .padding()
-                    .background(cameraViewModel.personDetected ? Color.green : Color.red)
-                    .foregroundColor(.white)
-                    .clipShape(Capsule())
-                    .padding()
+                VStack {
+                    Spacer()
+                    Text(cameraViewModel.personDetected ? "👤 Person Detected" : "No Person")
+                        .padding()
+                        .background(cameraViewModel.personDetected ? Color.green : Color.red)
+                        .foregroundColor(.white)
+                        .clipShape(Capsule())
+                        .padding()
+                }
+                .frame(width: geometry.size.width)
             }
-        }
-        .onAppear {
-            cameraViewModel.checkPermissions()
-            cameraViewModel.startSession()
-        }
-        .onDisappear {
-            cameraViewModel.stopSession()
+            .onAppear {
+                UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+                cameraViewModel.checkPermissions()
+                cameraViewModel.startSession()
+            }
+            .onDisappear {
+                UIDevice.current.endGeneratingDeviceOrientationNotifications()
+                cameraViewModel.stopSession()
+            }
         }
     }
 }
 
 final class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate {
-    let session = AVCaptureSession() // 🔧 Removed 'private'
+    let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "CameraQueue")
 
     @Published var personDetected = false
+    @Published var currentOrientation: UIDeviceOrientation = .portrait
+
+    override init() {
+        super.init()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(orientationChanged),
+            name: UIDevice.orientationDidChangeNotification,
+            object: nil
+        )
+    }
+
+    @objc private func orientationChanged() {
+        currentOrientation = UIDevice.current.orientation
+    }
 
     func checkPermissions() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -95,12 +115,43 @@ struct CameraView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> UIView {
         let view = UIView(frame: UIScreen.main.bounds)
+
         let previewLayer = AVCaptureVideoPreviewLayer(session: cameraViewModel.session)
-        previewLayer.videoGravity = AVLayerVideoGravity.resizeAspectFill // 🔧 Fixed
+        previewLayer.videoGravity = .resizeAspectFill
         previewLayer.frame = view.bounds
         view.layer.addSublayer(previewLayer)
+
+        context.coordinator.previewLayer = previewLayer
+
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.previewLayer?.frame = uiView.bounds
+
+        // Update preview orientation
+        if let connection = context.coordinator.previewLayer?.connection,
+           connection.isVideoOrientationSupported {
+
+            let orientation = cameraViewModel.currentOrientation
+            connection.videoOrientation = videoOrientation(from: orientation)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    class Coordinator {
+        var previewLayer: AVCaptureVideoPreviewLayer?
+    }
+
+    private func videoOrientation(from deviceOrientation: UIDeviceOrientation) -> AVCaptureVideoOrientation {
+        switch deviceOrientation {
+        case .landscapeLeft: return .landscapeRight
+        case .landscapeRight: return .landscapeLeft
+        case .portraitUpsideDown: return .portraitUpsideDown
+        default: return .portrait
+        }
+    }
 }
