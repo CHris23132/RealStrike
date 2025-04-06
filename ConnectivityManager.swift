@@ -3,7 +3,6 @@ import MultipeerConnectivity
 import SwiftUI
 import CoreLocation
 
-/// Wraps an invitation request for SwiftUI alerts.
 struct InvitationRequest: Identifiable {
     let id = UUID()
     let peerID: MCPeerID
@@ -11,13 +10,11 @@ struct InvitationRequest: Identifiable {
     let invitationHandler: (Bool, MCSession?) -> Void
 }
 
-/// Delegate protocol for connectivity events.
 protocol ConnectivityDelegate: AnyObject {
     func didReceiveHit(fromPeer peerID: MCPeerID, targetId: String)
     func didReceivePlayerData(_ player: PlayerData)
 }
 
-/// Simple model for player updates (not used in this simplified hit version).
 struct PlayerData: Identifiable {
     let id: String
     let location: CLLocation
@@ -35,6 +32,8 @@ class ConnectivityManager: NSObject, ObservableObject {
     weak var delegate: ConnectivityDelegate?
     
     @Published var invitationRequest: InvitationRequest? = nil
+    // Used to flash a hit overlay when a hit is received.
+    @Published var showHitOverlay: Bool = false
     
     override init() {
         super.init()
@@ -50,20 +49,17 @@ class ConnectivityManager: NSObject, ObservableObject {
         advertiser.startAdvertisingPeer()
     }
     
-    /// Returns a standard MCBrowserViewController for pairing.
     func makeBrowserViewController() -> MCBrowserViewController {
         let browserVC = MCBrowserViewController(serviceType: serviceType, session: session)
         browserVC.maximumNumberOfPeers = 8
         return browserVC
     }
     
-    /// Stop advertising and disconnect.
     func stop() {
         advertiser.stopAdvertisingPeer()
         session.disconnect()
     }
     
-    /// Sends a hit message to all connected peers.
     func sendHit(to targetId: String) {
         let dict: [String: Any] = [
             "action": "hit",
@@ -83,7 +79,6 @@ class ConnectivityManager: NSObject, ObservableObject {
         }
     }
     
-    /// (Optional) Sends player update data – not used in this simplified version.
     func sendPlayerUpdate(player: PlayerData) {
         let dict: [String: Any] = [
             "action": "update",
@@ -143,14 +138,16 @@ extension ConnectivityManager: MCSessionDelegate {
                 self.delegate?.didReceiveHit(fromPeer: peerID, targetId: targetId)
             }
         } else if action == "update" {
-            // Player update handling – not used in this simplified version.
             guard let id = dict["id"] as? String,
                   let lat = dict["latitude"] as? CLLocationDegrees,
                   let lon = dict["longitude"] as? CLLocationDegrees,
                   let heading = dict["heading"] as? Double,
                   let timestamp = dict["timestamp"] as? TimeInterval else { return }
             let location = CLLocation(latitude: lat, longitude: lon)
-            let playerData = PlayerData(id: id, location: location, heading: heading, lastUpdate: Date(timeIntervalSince1970: timestamp))
+            let playerData = PlayerData(id: id,
+                                        location: location,
+                                        heading: heading,
+                                        lastUpdate: Date(timeIntervalSince1970: timestamp))
             DispatchQueue.main.async {
                 self.delegate?.didReceivePlayerData(playerData)
             }

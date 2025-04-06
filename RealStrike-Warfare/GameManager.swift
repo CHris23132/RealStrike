@@ -26,9 +26,14 @@ class GameManager: NSObject, ObservableObject {
     // Timer to send periodic player updates.
     private var updateTimer: Timer?
     
+    // Respawn properties.
+    @Published var isRespawning: Bool = false
+    @Published var respawnTimeRemaining: Int = 0
+    private var respawnTimer: Timer?
+    
     override init() {
         super.init()
-        setupVolumeButtonHandler()
+        setupVolumeButtonHandler() // Optional: for volume-button fire triggering.
         connectivityManager.delegate = self
         locationManager.delegate = self
     }
@@ -37,7 +42,7 @@ class GameManager: NSObject, ObservableObject {
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         cameraViewModel.checkPermissions()
         cameraViewModel.startSession()
-        // Removed connectivityManager.startHosting() because advertising starts in init.
+        // Connectivity starts in ConnectivityManager.init.
         locationManager.requestPermissions()
         locationManager.startTracking()
         startSendingPlayerUpdates()
@@ -49,10 +54,11 @@ class GameManager: NSObject, ObservableObject {
         locationManager.stopTracking()
         connectivityManager.stop()
         updateTimer?.invalidate()
+        respawnTimer?.invalidate()
     }
     
     private func setupVolumeButtonHandler() {
-        // Optional: Retain volume button handling if desired.
+        // This is optional if you also want to trigger fire with the volume button.
         let volumeView = MPVolumeView(frame: .zero)
         if let window = UIApplication.shared.windows.first {
             window.addSubview(volumeView)
@@ -68,7 +74,7 @@ class GameManager: NSObject, ObservableObject {
         }
     }
     
-    // This method sends local player updates every 2 seconds.
+    // Sends local player update every 2 seconds.
     private func startSendingPlayerUpdates() {
         updateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.sendLocalPlayerUpdate()
@@ -89,12 +95,18 @@ class GameManager: NSObject, ObservableObject {
         handleFireAction()
     }
     
-    /// Core logic: if a person is detected, determine the best target based on relative bearing.
+    /// If not respawning and a person is detected, determine the best target and send a hit.
     private func handleFireAction() {
+        if isRespawning {
+            print("Respawning – cannot fire.")
+            return
+        }
+        
         guard cameraViewModel.personDetected else {
             print("No person detected, cannot fire.")
             return
         }
+        
         let shooterLocation = locationManager.currentLocation
         guard let shooterHeading = locationManager.currentHeading?.trueHeading else { return }
         
@@ -105,7 +117,7 @@ class GameManager: NSObject, ObservableObject {
             if player.id == localPlayerId { continue }
             let bearing = computeBearing(from: shooterLocation, to: player.location)
             let diff = angleDifference(shooterHeading, bearing)
-            if diff < smallestAngleDiff && diff < 15.0 { // 15° tolerance
+            if diff < smallestAngleDiff && diff < 15.0 {  // 15° tolerance
                 smallestAngleDiff = diff
                 bestCandidate = player
             }
@@ -122,7 +134,6 @@ class GameManager: NSObject, ObservableObject {
                 }
             }
         } else if let fallbackPeer = connectivityManager.session.connectedPeers.first {
-            // Fallback: if no target fits our criteria, use the first connected peer.
             strikesGiven += 1
             connectivityManager.sendHit(to: fallbackPeer.displayName)
             print("Fired at \(fallbackPeer.displayName) by fallback.")
@@ -137,7 +148,6 @@ class GameManager: NSObject, ObservableObject {
         }
     }
     
-    /// Compute bearing (in degrees) from one CLLocation to another.
     private func computeBearing(from start: CLLocation, to end: CLLocation) -> Double {
         let lat1 = start.coordinate.latitude * .pi / 180.0
         let lon1 = start.coordinate.longitude * .pi / 180.0
@@ -151,18 +161,43 @@ class GameManager: NSObject, ObservableObject {
         return (bearing + 360).truncatingRemainder(dividingBy: 360)
     }
     
-    /// Compute the smallest difference between two angles (in degrees).
     private func angleDifference(_ angle1: Double, _ angle2: Double) -> Double {
         let diff = abs(angle1 - angle2).truncatingRemainder(dividingBy: 360)
         return diff > 180 ? 360 - diff : diff
+    }
+    
+    /// Called when the local device receives a hit.
+    private func triggerRespawn() {
+        guard !isRespawning else { return }
+        isRespawning = true
+        respawnTimeRemaining = 8
+        // Flash a hit overlay briefly.
+        DispatchQueue.main.async {
+            self.connectivityManager.showHitOverlay = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.connectivityManager.showHitOverlay = false
+        }
+        // Start a countdown timer.
+        respawnTimer?.invalidate()
+        respawnTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+            guard let self = self else { return }
+            if self.respawnTimeRemaining > 0 {
+                self.respawnTimeRemaining -= 1
+            } else {
+                self.isRespawning = false
+                timer.invalidate()
+            }
+        }
     }
 }
 
 extension GameManager: ConnectivityDelegate {
     func didReceiveHit(fromPeer peerID: MCPeerID, targetId: String) {
-        if targetId == localPlayerId {
+        if targetId == localPlayerId && !isRespawning {
             hitsReceived += 1
             print("Hit received from: \(peerID.displayName)")
+            triggerRespawn()
         }
     }
     

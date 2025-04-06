@@ -5,7 +5,6 @@ import MultipeerConnectivity
 import CoreLocation
 import MediaPlayer
 
-// MARK: - Notification Extension for Volume Change
 extension Notification.Name {
     static let volumeDidChange = Notification.Name("AVSystemController_SystemVolumeDidChangeNotification")
 }
@@ -16,11 +15,9 @@ struct ContentView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Camera preview
                 CameraView(cameraViewModel: gameManager.cameraViewModel)
                     .edgesIgnoringSafeArea(.all)
                 
-                // Overlays: Scoreboard, Pair Button, and Fire Button
                 VStack {
                     HStack {
                         Button("Pair") {
@@ -46,17 +43,16 @@ struct ContentView: View {
                     
                     Spacer()
                     
-                    // Fire button
                     Button("Fire") {
                         gameManager.fireButtonPressed()
                     }
                     .padding()
-                    .background(Color.red)
+                    .background(gameManager.isRespawning ? Color.gray : Color.red)
                     .foregroundColor(.white)
                     .clipShape(Capsule())
+                    .disabled(gameManager.isRespawning)
                     .padding(.bottom, 20)
                     
-                    // Status message
                     Text(gameManager.cameraViewModel.personDetected ? "👤 Person Detected" : "No Person")
                         .padding(8)
                         .background(gameManager.cameraViewModel.personDetected ? Color.green : Color.red)
@@ -65,7 +61,6 @@ struct ContentView: View {
                         .padding(.bottom, 40)
                 }
                 
-                // Hit marker overlay – shows a red "X" for 1 second.
                 if let hitBox = gameManager.cameraViewModel.hitBoundingBox {
                     GeometryReader { geo in
                         let frame = CGRect(x: hitBox.minX * geo.size.width,
@@ -79,6 +74,26 @@ struct ContentView: View {
                             .position(x: frame.midX, y: frame.midY)
                     }
                 }
+                
+                // If respawning, show a tinted overlay with a countdown.
+                if gameManager.isRespawning {
+                    Color.red.opacity(0.4)
+                        .edgesIgnoringSafeArea(.all)
+                    VStack {
+                        Text("Respawning in")
+                            .font(.largeTitle)
+                            .foregroundColor(.white)
+                        Text("\(gameManager.respawnTimeRemaining)")
+                            .font(.system(size: 80, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
+                
+                // Optionally, if showHitOverlay is true, flash a hit overlay.
+                if gameManager.connectivityManager.showHitOverlay {
+                    Color.red.opacity(0.5)
+                        .edgesIgnoringSafeArea(.all)
+                }
             }
             .onAppear {
                 gameManager.startGameSession()
@@ -86,11 +101,9 @@ struct ContentView: View {
             .onDisappear {
                 gameManager.stopGameSession()
             }
-            // Present pairing UI.
             .sheet(isPresented: $gameManager.isShowingPairing) {
                 PairingView(connectivityManager: gameManager.connectivityManager)
             }
-            // Alert for incoming invitations.
             .alert(item: $gameManager.connectivityManager.invitationRequest) { invitation in
                 Alert(title: Text("Invitation"),
                       message: Text("Accept invitation from \(invitation.peerID.displayName)?"),
