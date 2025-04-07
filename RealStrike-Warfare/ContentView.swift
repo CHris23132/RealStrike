@@ -20,9 +20,10 @@ struct ContentView: View {
                 CameraView(cameraViewModel: gameManager.cameraViewModel)
                     .edgesIgnoringSafeArea(.all)
                 
-                // Pair button (top left)
+                // Top overlay: Pair button (top left) and Scoreboard (top right)
                 VStack {
                     HStack {
+                        // Pair button
                         Button("Pair") {
                             gameManager.isShowingPairing = true
                         }
@@ -30,16 +31,31 @@ struct ContentView: View {
                         .background(Color.blue.opacity(0.8))
                         .foregroundColor(.white)
                         .clipShape(Capsule())
+                        
                         Spacer()
+                        
+                        // Scoreboard: Strikes and Hits
+                        VStack(alignment: .trailing) {
+                            Text("Strikes: \(gameManager.strikesGiven)")
+                                .font(.headline)
+                            Text("Hits: \(gameManager.hitsReceived)")
+                                .font(.headline)
+                        }
+                        .padding(8)
+                        .background(Color.black.opacity(0.6))
+                        .foregroundColor(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
+                    .padding()
+                    
                     Spacer()
                 }
-                .padding()
                 
-                // Person detection indicator (bottom left)
+                // Bottom overlay: Person detection indicator (bottom left) and Fire button (bottom right)
                 VStack {
                     Spacer()
                     HStack {
+                        // Person detection indicator
                         if gameManager.cameraViewModel.personDetected {
                             Image("Person-Is-Detected-icon")
                                 .resizable()
@@ -50,15 +66,7 @@ struct ContentView: View {
                                 .frame(width: 50, height: 50)
                         }
                         Spacer()
-                    }
-                    .padding()
-                }
-                
-                // Fire button (bottom right)
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
+                        // Fire button
                         Button(action: { gameManager.fireButtonPressed() }) {
                             Image("Fire-Button")
                                 .resizable()
@@ -69,7 +77,7 @@ struct ContentView: View {
                     .padding()
                 }
                 
-                // Strike marker overlay using the "Strike-Marker" asset
+                // Strike marker overlay – displays the Strike-Marker image over the detected person area.
                 if let hitBox = gameManager.cameraViewModel.hitBoundingBox {
                     GeometryReader { geo in
                         let frame = CGRect(x: hitBox.minX * geo.size.width,
@@ -97,6 +105,12 @@ struct ContentView: View {
                             .foregroundColor(.white)
                     }
                 }
+                
+                // Optionally, show a hit overlay when triggered.
+                if gameManager.connectivityManager.showHitOverlay {
+                    Color.red.opacity(0.5)
+                        .edgesIgnoringSafeArea(.all)
+                }
             }
             .onAppear {
                 gameManager.startGameSession()
@@ -104,7 +118,7 @@ struct ContentView: View {
             .onDisappear {
                 gameManager.stopGameSession()
             }
-            // Present pairing UI.
+            // Pairing UI sheet.
             .sheet(isPresented: $gameManager.isShowingPairing) {
                 PairingView(connectivityManager: gameManager.connectivityManager)
             }
