@@ -5,6 +5,7 @@ import MultipeerConnectivity
 import CoreLocation
 import MediaPlayer
 
+// MARK: - Notification Extension for Volume Change
 extension Notification.Name {
     static let volumeDidChange = Notification.Name("AVSystemController_SystemVolumeDidChangeNotification")
 }
@@ -15,9 +16,11 @@ struct ContentView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
+                // Camera preview
                 CameraView(cameraViewModel: gameManager.cameraViewModel)
                     .edgesIgnoringSafeArea(.all)
                 
+                // Pair button (top left)
                 VStack {
                     HStack {
                         Button("Pair") {
@@ -27,55 +30,61 @@ struct ContentView: View {
                         .background(Color.blue.opacity(0.8))
                         .foregroundColor(.white)
                         .clipShape(Capsule())
-                        
                         Spacer()
-                        
-                        VStack(alignment: .trailing) {
-                            Text("Strikes: \(gameManager.strikesGiven)")
-                            Text("Hits: \(gameManager.hitsReceived)")
-                        }
-                        .padding(8)
-                        .background(Color.black.opacity(0.6))
-                        .foregroundColor(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
-                    .padding()
-                    
                     Spacer()
-                    
-                    Button("Fire") {
-                        gameManager.fireButtonPressed()
+                }
+                .padding()
+                
+                // Person detection indicator (bottom left)
+                VStack {
+                    Spacer()
+                    HStack {
+                        if gameManager.cameraViewModel.personDetected {
+                            Image("Person-Is-Detected-icon")
+                                .resizable()
+                                .frame(width: 50, height: 50)
+                        } else {
+                            Image("Person-Not-Detected-icon")
+                                .resizable()
+                                .frame(width: 50, height: 50)
+                        }
+                        Spacer()
                     }
                     .padding()
-                    .background(gameManager.isRespawning ? Color.gray : Color.red)
-                    .foregroundColor(.white)
-                    .clipShape(Capsule())
-                    .disabled(gameManager.isRespawning)
-                    .padding(.bottom, 20)
-                    
-                    Text(gameManager.cameraViewModel.personDetected ? "👤 Person Detected" : "No Person")
-                        .padding(8)
-                        .background(gameManager.cameraViewModel.personDetected ? Color.green : Color.red)
-                        .foregroundColor(.white)
-                        .clipShape(Capsule())
-                        .padding(.bottom, 40)
                 }
                 
+                // Fire button (bottom right)
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button(action: { gameManager.fireButtonPressed() }) {
+                            Image("Fire-Button")
+                                .resizable()
+                                .frame(width: 70, height: 70)
+                        }
+                        .disabled(gameManager.isRespawning)
+                    }
+                    .padding()
+                }
+                
+                // Strike marker overlay using the "Strike-Marker" asset
                 if let hitBox = gameManager.cameraViewModel.hitBoundingBox {
                     GeometryReader { geo in
                         let frame = CGRect(x: hitBox.minX * geo.size.width,
                                            y: (1 - hitBox.maxY) * geo.size.height,
                                            width: hitBox.width * geo.size.width,
                                            height: hitBox.height * geo.size.height)
-                        Text("X")
-                            .font(.system(size: min(frame.width, frame.height) * 2, weight: .bold))
-                            .foregroundColor(.red)
+                        Image("Strike-Marker")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
                             .frame(width: frame.width, height: frame.height)
                             .position(x: frame.midX, y: frame.midY)
                     }
                 }
                 
-                // If respawning, show a tinted overlay with a countdown.
+                // Respawn overlay: tinted overlay with an 8-second countdown.
                 if gameManager.isRespawning {
                     Color.red.opacity(0.4)
                         .edgesIgnoringSafeArea(.all)
@@ -88,12 +97,6 @@ struct ContentView: View {
                             .foregroundColor(.white)
                     }
                 }
-                
-                // Optionally, if showHitOverlay is true, flash a hit overlay.
-                if gameManager.connectivityManager.showHitOverlay {
-                    Color.red.opacity(0.5)
-                        .edgesIgnoringSafeArea(.all)
-                }
             }
             .onAppear {
                 gameManager.startGameSession()
@@ -101,9 +104,11 @@ struct ContentView: View {
             .onDisappear {
                 gameManager.stopGameSession()
             }
+            // Present pairing UI.
             .sheet(isPresented: $gameManager.isShowingPairing) {
                 PairingView(connectivityManager: gameManager.connectivityManager)
             }
+            // Alert for incoming invitations.
             .alert(item: $gameManager.connectivityManager.invitationRequest) { invitation in
                 Alert(title: Text("Invitation"),
                       message: Text("Accept invitation from \(invitation.peerID.displayName)?"),
