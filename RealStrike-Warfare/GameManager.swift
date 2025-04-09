@@ -31,11 +31,30 @@ class GameManager: NSObject, ObservableObject {
     @Published var respawnTimeRemaining: Int = 0
     private var respawnTimer: Timer?
     
+    // MARK: - Sound Effects Player
+    private var fireSoundPlayer: AVAudioPlayer?
+    
+    // MARK: - Hit History Tracking
+    /// Tracks opponents (by their id) that have been hit in the current cycle.
+    private var hitHistory = Set<String>()
+    
     override init() {
         super.init()
         setupVolumeButtonHandler() // Optional: for volume-button fire triggering.
         connectivityManager.delegate = self
         locationManager.delegate = self
+        
+        // Load the fire sound effect.
+        if let fireSoundURL = Bundle.main.url(forResource: "fire-sound-effect", withExtension: "m4a") {
+            do {
+                fireSoundPlayer = try AVAudioPlayer(contentsOf: fireSoundURL)
+                fireSoundPlayer?.prepareToPlay()
+            } catch {
+                print("Error loading fire sound effect: \(error)")
+            }
+        } else {
+            print("fire-sound-effect.m4a not found.")
+        }
     }
     
     func startGameSession() {
@@ -58,7 +77,7 @@ class GameManager: NSObject, ObservableObject {
     }
     
     private func setupVolumeButtonHandler() {
-        // This is optional if you also want to trigger fire with the volume button.
+        // Optional: trigger fire with the volume button.
         let volumeView = MPVolumeView(frame: .zero)
         if let window = UIApplication.shared.windows.first {
             window.addSubview(volumeView)
@@ -95,12 +114,18 @@ class GameManager: NSObject, ObservableObject {
         handleFireAction()
     }
     
-    /// If not respawning and a person is detected, determine the best target and send a hit.
+    /// Determines the best target using only proximity.
+    /// It selects the closest opponent based on the latest location updates.
+    /// If that opponent was already hit during their current respawn period,
+    /// the hit is not registered again.
     private func handleFireAction() {
         if isRespawning {
             print("Respawning – cannot fire.")
             return
         }
+        
+        // Play the fire sound effect.
+        fireSoundPlayer?.play()
         
         guard cameraViewModel.personDetected else {
             print("No person detected, cannot fire.")
@@ -108,35 +133,50 @@ class GameManager: NSObject, ObservableObject {
         }
         
         let shooterLocation = locationManager.currentLocation
-        guard let shooterHeading = locationManager.currentHeading?.trueHeading else { return }
-        
         var bestCandidate: PlayerData?
-        var smallestAngleDiff = 360.0
+        var smallestDistance = Double.greatestFiniteMagnitude
         
+        // Loop through all other players to find the closest candidate.
         for player in otherPlayers.values {
             if player.id == localPlayerId { continue }
-            let bearing = computeBearing(from: shooterLocation, to: player.location)
-            let diff = angleDifference(shooterHeading, bearing)
-            if diff < smallestAngleDiff && diff < 15.0 {  // 15° tolerance
-                smallestAngleDiff = diff
+            let distance = shooterLocation.distance(from: player.location)
+            if distance < smallestDistance {
+                smallestDistance = distance
                 bestCandidate = player
             }
         }
         
+        // Fallback: if no candidate is available from updates, take the first connected peer.
+        if bestCandidate == nil,
+           let fallbackPeer = connectivityManager.session.connectedPeers.first {
+            print("No location candidate – falling back to \(fallbackPeer.displayName)")
+            bestCandidate = PlayerData(id: fallbackPeer.displayName,
+                                       location: shooterLocation, // fallback uses shooter's location
+                                       heading: 0,
+                                       lastUpdate: Date())
+        }
+        
+        // If a target is found, ensure we haven't already hit them.
         if let target = bestCandidate {
+            if hitHistory.contains(target.id) {
+                print("Target \(target.id) was already hit. Ignoring repeated hit.")
+                return
+            }
+            
+            // Register the hit.
             strikesGiven += 1
             connectivityManager.sendHit(to: target.id)
-            print("Fired at \(target.id) with angle diff \(smallestAngleDiff)°")
-            if let detection = cameraViewModel.currentDetection {
-                cameraViewModel.hitBoundingBox = detection
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    self.cameraViewModel.hitBoundingBox = nil
-                }
+            print("Fired at \(target.id) with a distance of \(smallestDistance) meters.")
+            
+            // Record the hit so subsequent shots don't count.
+            hitHistory.insert(target.id)
+            
+            // Clear this target from hit history after 8 seconds (duration of respawn).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) {
+                self.hitHistory.remove(target.id)
+                print("Cleared hit record for target \(target.id)")
             }
-        } else if let fallbackPeer = connectivityManager.session.connectedPeers.first {
-            strikesGiven += 1
-            connectivityManager.sendHit(to: fallbackPeer.displayName)
-            print("Fired at \(fallbackPeer.displayName) by fallback.")
+            
             if let detection = cameraViewModel.currentDetection {
                 cameraViewModel.hitBoundingBox = detection
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -144,10 +184,11 @@ class GameManager: NSObject, ObservableObject {
                 }
             }
         } else {
-            print("No target available")
+            print("No target available.")
         }
     }
     
+    // Unused in the proximity-only approach.
     private func computeBearing(from start: CLLocation, to end: CLLocation) -> Double {
         let lat1 = start.coordinate.latitude * .pi / 180.0
         let lon1 = start.coordinate.longitude * .pi / 180.0
@@ -161,16 +202,19 @@ class GameManager: NSObject, ObservableObject {
         return (bearing + 360).truncatingRemainder(dividingBy: 360)
     }
     
+    // Unused in the proximity-only approach.
     private func angleDifference(_ angle1: Double, _ angle2: Double) -> Double {
         let diff = abs(angle1 - angle2).truncatingRemainder(dividingBy: 360)
         return diff > 180 ? 360 - diff : diff
     }
     
     /// Called when the local device receives a hit.
+    /// No sound is played on hit to keep it responsive.
     private func triggerRespawn() {
         guard !isRespawning else { return }
         isRespawning = true
         respawnTimeRemaining = 8
+        
         // Flash a hit overlay briefly.
         DispatchQueue.main.async {
             self.connectivityManager.showHitOverlay = true
@@ -178,7 +222,7 @@ class GameManager: NSObject, ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             self.connectivityManager.showHitOverlay = false
         }
-        // Start a countdown timer.
+        
         respawnTimer?.invalidate()
         respawnTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
             guard let self = self else { return }
@@ -194,6 +238,7 @@ class GameManager: NSObject, ObservableObject {
 
 extension GameManager: ConnectivityDelegate {
     func didReceiveHit(fromPeer peerID: MCPeerID, targetId: String) {
+        // Process the hit only if this device is the target.
         if targetId == localPlayerId && !isRespawning {
             hitsReceived += 1
             print("Hit received from: \(peerID.displayName)")

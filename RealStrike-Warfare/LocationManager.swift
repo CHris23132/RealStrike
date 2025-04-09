@@ -1,4 +1,3 @@
-// LocationManager.swift
 import Foundation
 import CoreLocation
 
