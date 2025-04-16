@@ -20,6 +20,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				PairingView.swift,
 			);
 			target = 0498941F2DA0F16200E5CD34 /* RealStrike-Warfare */;
 		};

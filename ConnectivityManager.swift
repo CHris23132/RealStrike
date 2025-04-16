@@ -3,18 +3,6 @@ import MultipeerConnectivity
 import SwiftUI
 import CoreLocation
 
-struct InvitationRequest: Identifiable {
-    let id = UUID()
-    let peerID: MCPeerID
-    let context: Data?
-    let invitationHandler: (Bool, MCSession?) -> Void
-}
-
-protocol ConnectivityDelegate: AnyObject {
-    func didReceiveHit(fromPeer peerID: MCPeerID, targetId: String)
-    func didReceivePlayerData(_ player: PlayerData)
-}
-
 struct PlayerData: Identifiable {
     let id: String
     let location: CLLocation
@@ -22,41 +10,61 @@ struct PlayerData: Identifiable {
     let lastUpdate: Date
 }
 
+protocol ConnectivityDelegate: AnyObject {
+    func didReceiveHit(fromPeer peerID: MCPeerID, targetId: String)
+    func didReceivePlayerData(_ player: PlayerData)
+}
+
 class ConnectivityManager: NSObject, ObservableObject {
     let myPeerID = MCPeerID(displayName: UIDevice.current.name)
     private(set) var session: MCSession!
     
     private var advertiser: MCNearbyServiceAdvertiser!
+    private var browser: MCNearbyServiceBrowser!
     private let serviceType = "ar-laser-tag"
+    
+    // List of discovered peers available for pairing.
+    @Published var availablePeers: [MCPeerID] = []
     
     weak var delegate: ConnectivityDelegate?
     
-    @Published var invitationRequest: InvitationRequest? = nil
     // Used to flash a hit overlay when a hit is received.
     @Published var showHitOverlay: Bool = false
     
     override init() {
         super.init()
+        
         session = MCSession(peer: myPeerID,
                             securityIdentity: nil,
                             encryptionPreference: .required)
         session.delegate = self
         
+        // Start advertising
         advertiser = MCNearbyServiceAdvertiser(peer: myPeerID,
                                                  discoveryInfo: nil,
                                                  serviceType: serviceType)
         advertiser.delegate = self
         advertiser.startAdvertisingPeer()
+        
+        // Start browsing for nearby peers.
+        browser = MCNearbyServiceBrowser(peer: myPeerID, serviceType: serviceType)
+        browser.delegate = self
+        browser.startBrowsingForPeers()
     }
     
-    func makeBrowserViewController() -> MCBrowserViewController {
-        let browserVC = MCBrowserViewController(serviceType: serviceType, session: session)
-        browserVC.maximumNumberOfPeers = 8
-        return browserVC
+    // Call this method from the pairing UI when the host taps “Start Game”.
+    func invitePeers(_ peers: [MCPeerID]) {
+        for peer in peers {
+            // Only invite if the peer isn’t already connected.
+            if !session.connectedPeers.contains(peer) {
+                browser.invitePeer(peer, to: session, withContext: nil, timeout: 30)
+            }
+        }
     }
     
     func stop() {
         advertiser.stopAdvertisingPeer()
+        browser.stopBrowsingForPeers()
         session.disconnect()
     }
     
@@ -102,17 +110,15 @@ class ConnectivityManager: NSObject, ObservableObject {
     }
 }
 
+// MARK: - MCNearbyServiceAdvertiserDelegate
 extension ConnectivityManager: MCNearbyServiceAdvertiserDelegate {
+    // Auto-accept incoming invitations without any UI prompt.
     func advertiser(_ advertiser: MCNearbyServiceAdvertiser,
                     didReceiveInvitationFromPeer peerID: MCPeerID,
                     withContext context: Data?,
                     invitationHandler: @escaping (Bool, MCSession?) -> Void) {
-        print("Invitation received from \(peerID.displayName)")
-        DispatchQueue.main.async {
-            self.invitationRequest = InvitationRequest(peerID: peerID,
-                                                       context: context,
-                                                       invitationHandler: invitationHandler)
-        }
+        print("Auto-accept invitation from \(peerID.displayName)")
+        invitationHandler(true, session)
     }
     
     func advertiser(_ advertiser: MCNearbyServiceAdvertiser,
@@ -121,11 +127,36 @@ extension ConnectivityManager: MCNearbyServiceAdvertiserDelegate {
     }
 }
 
+// MARK: - MCNearbyServiceBrowserDelegate
+extension ConnectivityManager: MCNearbyServiceBrowserDelegate {
+    func browser(_ browser: MCNearbyServiceBrowser, foundPeer peerID: MCPeerID, withDiscoveryInfo info: [String : String]?) {
+        if peerID == myPeerID { return }
+        if !availablePeers.contains(peerID) && !session.connectedPeers.contains(peerID) {
+            DispatchQueue.main.async {
+                self.availablePeers.append(peerID)
+            }
+        }
+    }
+    
+    func browser(_ browser: MCNearbyServiceBrowser, lostPeer peerID: MCPeerID) {
+        DispatchQueue.main.async {
+            self.availablePeers.removeAll { $0 == peerID }
+        }
+    }
+}
+
+// MARK: - MCSessionDelegate
 extension ConnectivityManager: MCSessionDelegate {
     func session(_ session: MCSession,
                  peer peerID: MCPeerID,
                  didChange state: MCSessionState) {
         print("Peer \(peerID.displayName) state changed to \(state.rawValue)")
+        DispatchQueue.main.async {
+            if state == .connected {
+                // Remove connected peers from the available peers list.
+                self.availablePeers.removeAll { $0 == peerID }
+            }
+        }
     }
     
     func session(_ session: MCSession,

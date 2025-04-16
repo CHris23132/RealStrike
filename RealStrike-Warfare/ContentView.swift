@@ -5,11 +5,6 @@ import MultipeerConnectivity
 import CoreLocation
 import MediaPlayer
 
-// MARK: - Notification Extension for Volume Change
-extension Notification.Name {
-    static let volumeDidChange = Notification.Name("AVSystemController_SystemVolumeDidChangeNotification")
-}
-
 struct ContentView: View {
     @StateObject private var gameManager = GameManager()
     
@@ -23,7 +18,6 @@ struct ContentView: View {
                 // Top overlay: Pair button (top left) and Scoreboard (top right)
                 VStack {
                     HStack {
-                        // Pair button
                         Button("Pair") {
                             gameManager.isShowingPairing = true
                         }
@@ -34,7 +28,6 @@ struct ContentView: View {
                         
                         Spacer()
                         
-                        // Scoreboard: Strikes and Hits
                         VStack(alignment: .trailing) {
                             Text("Strikes: \(gameManager.strikesGiven)")
                                 .font(.headline)
@@ -118,22 +111,11 @@ struct ContentView: View {
             .onDisappear {
                 gameManager.stopGameSession()
             }
-            // Pairing UI sheet.
+            // Present the new group pairing interface.
             .sheet(isPresented: $gameManager.isShowingPairing) {
-                PairingView(connectivityManager: gameManager.connectivityManager)
-            }
-            // Alert for incoming invitations.
-            .alert(item: $gameManager.connectivityManager.invitationRequest) { invitation in
-                Alert(title: Text("Invitation"),
-                      message: Text("Accept invitation from \(invitation.peerID.displayName)?"),
-                      primaryButton: .default(Text("Accept")) {
-                        invitation.invitationHandler(true, gameManager.connectivityManager.session)
-                        gameManager.connectivityManager.invitationRequest = nil
-                      },
-                      secondaryButton: .cancel {
-                        invitation.invitationHandler(false, nil)
-                        gameManager.connectivityManager.invitationRequest = nil
-                      })
+                GroupPairingView(connectivityManager: gameManager.connectivityManager,
+                                 isPresented: $gameManager.isShowingPairing,
+                                 requiredPlayerCount: 2) // Adjust as needed.
             }
         }
     }
