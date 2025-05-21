@@ -108,6 +108,12 @@ class ConnectivityManager: NSObject, ObservableObject {
             }
         }
     }
+    
+    /// Returns a configured browser view controller for peer discovery.
+    func makeBrowserViewController() -> MCBrowserViewController {
+        let vc = MCBrowserViewController(serviceType: serviceType, session: session)
+        return vc
+    }
 }
 
 // MARK: - MCNearbyServiceAdvertiserDelegate

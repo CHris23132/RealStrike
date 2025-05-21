@@ -15,9 +15,22 @@
 		0498943B2DA1E10400E5CD34 /* ConnectivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		043CCEB12DDD67D600F792D3 /* Exceptions for "RealStrike-Warfare" folder in "RealStrike-Warfare" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 0498941F2DA0F16200E5CD34 /* RealStrike-Warfare */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		049894222DA0F16200E5CD34 /* RealStrike-Warfare */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				043CCEB12DDD67D600F792D3 /* Exceptions for "RealStrike-Warfare" folder in "RealStrike-Warfare" target */,
+			);
 			path = "RealStrike-Warfare";
 			sourceTree = "<group>";
 		};
