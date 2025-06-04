@@ -278,7 +278,8 @@
 				INFOPLIST_FILE = "RealStrike-Warfare/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Real Strike";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.action-games";
-				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app uses Bluetooth to connect to nearby devices for multiplayer gameplay.";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app uses Bluetooth to connect to nearby devices for multiplayer gameplay and to connect to your Real_Strike_Gamepad.";
+				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "This app needs Bluetooth to connect to your Real_Strike_Gamepad.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need access to the camera to detect people in real-time";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app uses the local network to discover and connect to nearby devices for multiplayer gameplay.";
 				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "Location is needed to find nearby players";
@@ -319,7 +320,8 @@
 				INFOPLIST_FILE = "RealStrike-Warfare/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Real Strike";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.action-games";
-				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app uses Bluetooth to connect to nearby devices for multiplayer gameplay.";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "This app uses Bluetooth to connect to nearby devices for multiplayer gameplay and to connect to your Real_Strike_Gamepad.";
+				INFOPLIST_KEY_NSBluetoothPeripheralUsageDescription = "This app needs Bluetooth to connect to your Real_Strike_Gamepad.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "We need access to the camera to detect people in real-time";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This app uses the local network to discover and connect to nearby devices for multiplayer gameplay.";
 				INFOPLIST_KEY_NSLocationAlwaysUsageDescription = "Location is needed to find nearby players";

@@ -3,11 +3,21 @@ import AVFoundation
 import CoreLocation
 import MultipeerConnectivity
 import SwiftUI
+import CoreBluetooth
 
 class GameManager: NSObject, ObservableObject {
     @Published var cameraViewModel = CameraViewModel()
     @Published var connectivityManager = ConnectivityManager()
     private let locationManager = LocationManager()
+    
+    // ----------------------------------------------------------------------------------------------------------------
+    // MARK: - Bluetooth Gamepad
+    //
+    // We’ll read "Shot_Fired" strings from the BLE gamepad. Whenever we see "Shot_Fired",
+    // we call handleFireAction() exactly as if the user tapped the on-screen Fire button.
+    //
+    private var bluetoothManager: BluetoothManager!
+    // ----------------------------------------------------------------------------------------------------------------
     
     // Score properties.
     @Published var strikesGiven: Int = 0
@@ -41,6 +51,20 @@ class GameManager: NSObject, ObservableObject {
         connectivityManager.delegate = self
         locationManager.delegate = self
         
+        // ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        // Create and configure our BluetoothManager.
+        // Whenever the BLE gamepad sends the ASCII string "Shot_Fired", invoke handleFireAction().
+        bluetoothManager = BluetoothManager()
+        bluetoothManager.onShotFired = { [weak self] in
+            guard let self = self else { return }
+            self.handleFireAction()
+        }
+        // Note: BluetoothManager will automatically begin scanning once its central manager is .poweredOn.
+        // If you prefer to start scanning explicitly later, you could call:
+        //     bluetoothManager.startScanning()
+        // For now, we’ll let it auto-scan in init.
+        // ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        
         // Configure the audio session so sound effects play correctly.
         do {
             let audioSession = AVAudioSession.sharedInstance()
@@ -64,6 +88,8 @@ class GameManager: NSObject, ObservableObject {
     }
     
     func startGameSession() {
+        // In case we hadn’t started scanning before, ensure BLE scanning is underway:
+        bluetoothManager.startScanning()
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         cameraViewModel.checkPermissions()
         cameraViewModel.startSession()
