@@ -3,7 +3,9 @@ import AVFoundation
 import Vision
 import SwiftUI
 
-final class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+final class CameraViewModel: NSObject, ObservableObject,
+                              AVCaptureVideoDataOutputSampleBufferDelegate,
+                              AVCaptureMetadataOutputObjectsDelegate {
     let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "CameraQueue")
     
@@ -13,6 +15,9 @@ final class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutpu
     @Published var currentDetection: CGRect? = nil
     // When a hit is registered, this temporarily holds the bounding box to show an overlay.
     @Published var hitBoundingBox: CGRect? = nil
+    
+    /// Called when a QR code is detected.
+    var onQRCodeScanned: ((String) -> Void)?
     
     // Create a VNDetectHumanRectanglesRequest without setting unavailable properties.
     private lazy var detectionRequest: VNDetectHumanRectanglesRequest = {
@@ -65,6 +70,14 @@ final class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutpu
         guard session.canAddOutput(output) else { return }
         session.addOutput(output)
         
+        // Add metadata output for QR codes
+        let metadataOutput = AVCaptureMetadataOutput()
+        if session.canAddOutput(metadataOutput) {
+            session.addOutput(metadataOutput)
+            metadataOutput.setMetadataObjectsDelegate(self, queue: .main)
+            metadataOutput.metadataObjectTypes = [.qr]
+        }
+        
         session.commitConfiguration()
         session.startRunning()
     }
@@ -84,6 +97,23 @@ final class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutpu
             try handler.perform([detectionRequest])
         } catch {
             print("Error performing detection: \(error)")
+        }
+    }
+    
+    // MARK: - QR Code Detection
+
+    func metadataOutput(_ output: AVCaptureMetadataOutput,
+                        didOutput metadataObjects: [AVMetadataObject],
+                        from connection: AVCaptureConnection) {
+        for object in metadataObjects {
+            guard let readable = object as? AVMetadataMachineReadableCodeObject,
+                  readable.type == .qr,
+                  let stringValue = readable.stringValue else { continue }
+            DispatchQueue.main.async {
+                self.onQRCodeScanned?(stringValue)
+            }
+            // Only take the first QR code per frame
+            break
         }
     }
 }

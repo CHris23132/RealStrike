@@ -13,6 +13,8 @@ struct PlayerData: Identifiable {
 protocol ConnectivityDelegate: AnyObject {
     func didReceiveHit(fromPeer peerID: MCPeerID, targetId: String)
     func didReceivePlayerData(_ player: PlayerData)
+    func didReceiveTeamAssignments(_ assignments: [String: Team])
+    func didReceiveGameOver(winner: Team)
 }
 
 class ConnectivityManager: NSObject, ObservableObject {
@@ -109,6 +111,33 @@ class ConnectivityManager: NSObject, ObservableObject {
         }
     }
     
+    private func broadcast(_ dict: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: dict, options: []) else {
+            print("Error encoding message JSON.")
+            return
+        }
+        if !session.connectedPeers.isEmpty {
+            do {
+                try session.send(data, toPeers: session.connectedPeers, with: .reliable)
+            } catch {
+                print("Error sending message: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    /// Send team assignments to all peers
+    func sendTeamAssignments(_ assignments: [String: Team]) {
+        let list = assignments.map { ["id": $0.key, "team": $0.value.rawValue] }
+        let dict: [String: Any] = ["action": "assignTeams", "assignments": list]
+        broadcast(dict)
+    }
+
+    /// Notify peers that game is over and declare the winning team
+    func sendGameOver(winner: Team) {
+        let dict: [String: Any] = ["action": "gameOver", "winner": winner.rawValue]
+        broadcast(dict)
+    }
+    
     /// Returns a configured browser view controller for peer discovery.
     func makeBrowserViewController() -> MCBrowserViewController {
         let vc = MCBrowserViewController(serviceType: serviceType, session: session)
@@ -187,6 +216,25 @@ extension ConnectivityManager: MCSessionDelegate {
                                         lastUpdate: Date(timeIntervalSince1970: timestamp))
             DispatchQueue.main.async {
                 self.delegate?.didReceivePlayerData(playerData)
+            }
+        } else if action == "assignTeams",
+                  let arr = dict["assignments"] as? [[String: Any]] {
+            var assignments: [String: Team] = [:]
+            for entry in arr {
+                if let id = entry["id"] as? String,
+                   let raw = entry["team"] as? String,
+                   let team = Team(rawValue: raw) {
+                    assignments[id] = team
+                }
+            }
+            DispatchQueue.main.async {
+                self.delegate?.didReceiveTeamAssignments(assignments)
+            }
+        } else if action == "gameOver",
+                  let raw = dict["winner"] as? String,
+                  let winnerTeam = Team(rawValue: raw) {
+            DispatchQueue.main.async {
+                self.delegate?.didReceiveGameOver(winner: winnerTeam)
             }
         }
     }

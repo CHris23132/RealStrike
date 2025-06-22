@@ -7,6 +7,7 @@ import MediaPlayer
 
 struct ContentView: View {
     @StateObject private var gameManager = GameManager()
+    @State private var showingModePicker = false
     
     var body: some View {
         GeometryReader { geometry in
@@ -23,6 +24,14 @@ struct ContentView: View {
                         }
                         .padding(8)
                         .background(Color.blue.opacity(0.8))
+                        .foregroundColor(.white)
+                        .clipShape(Capsule())
+                        
+                        Button("Mode") {
+                            showingModePicker = true
+                        }
+                        .padding(8)
+                        .background(Color.green.opacity(0.8))
                         .foregroundColor(.white)
                         .clipShape(Capsule())
                         
@@ -85,17 +94,29 @@ struct ContentView: View {
                     }
                 }
                 
-                // Respawn overlay: tinted overlay with an 8-second countdown.
+                // Respawn overlay
                 if gameManager.isRespawning {
                     Color.red.opacity(0.4)
                         .edgesIgnoringSafeArea(.all)
-                    VStack {
-                        Text("Respawning in")
-                            .font(.largeTitle)
-                            .foregroundColor(.white)
-                        Text("\(gameManager.respawnTimeRemaining)")
-                            .font(.system(size: 80, weight: .bold))
-                            .foregroundColor(.white)
+
+                    if gameManager.currentMode == .freeForAll {
+                        // Free-for-All: show countdown
+                        VStack {
+                            Text("Respawning in")
+                                .font(.largeTitle)
+                                .foregroundColor(.white)
+                            Text("\(gameManager.respawnTimeRemaining)")
+                                .font(.system(size: 80, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                    } else {
+                        // Team modes: show QR codes
+                        VStack(spacing: 20) {
+                            QRCodeDisplayView(mode: gameManager.currentMode,
+                                              team: gameManager.localTeam)
+                                .frame(width: 250, height: 300)
+                        }
+                        .padding()
                     }
                 }
                 
@@ -113,10 +134,31 @@ struct ContentView: View {
             }
             // Present the new group pairing interface.
             .sheet(isPresented: $gameManager.isShowingPairing) {
-                GroupPairingView(connectivityManager: gameManager.connectivityManager,
-                                 isPresented: $gameManager.isShowingPairing,
-                                 requiredPlayerCount: 2) // Adjust as needed.
+                GroupPairingView(gameManager: gameManager,
+                                 isPresented: $gameManager.isShowingPairing)
             }
+            .sheet(isPresented: $showingModePicker) {
+                GameModePicker(selected: $gameManager.currentMode)
+            }
+        }
+    }
+}
+
+struct GameModePicker: View {
+    @Binding var selected: GameMode
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Picker("Game Mode", selection: $selected) {
+                    Text("Free-for-All").tag(GameMode.freeForAll)
+                    Text("Team Match").tag(GameMode.teamMatch)
+                    Text("Capture the Flag").tag(GameMode.captureTheFlag)
+                }
+                .pickerStyle(.segmented)
+            }
+            .navigationTitle("Select Mode")
+            .padding()
         }
     }
 }
