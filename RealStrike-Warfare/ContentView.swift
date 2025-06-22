@@ -35,6 +35,13 @@ struct ContentView: View {
                         .foregroundColor(.white)
                         .clipShape(Capsule())
                         
+                        if let team = gameManager.localTeam {
+                            Text(team == .red ? "Red" : "Blue")
+                                .font(.headline)
+                                .foregroundColor(team == .red ? .red : .blue)
+                                .padding(.horizontal, 6)
+                        }
+                        
                         Spacer()
                         
                         VStack(alignment: .trailing) {
