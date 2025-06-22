@@ -4,84 +4,62 @@ import MultipeerConnectivity
 struct GroupPairingView: View {
     @ObservedObject var gameManager: GameManager
     @Binding var isPresented: Bool
-    @State private var assignments: [MCPeerID: Team] = [:]
+    let maxCount: Int = 8           // allow up to 8 players
+    let minCount: Int = 2           // need at least 2 to start
 
-    private func isPeer(_ peer: MCPeerID, in team: Team) -> Bool {
-        assignments[peer] == team
+    // MARK: – Derived helpers
+    private var allPeers: [MCPeerID] {
+        // host first, then everyone we can see
+        [gameManager.connectivityManager.myPeerID] + gameManager.connectivityManager.availablePeers
     }
 
-    private func bgColor(for peer: MCPeerID, team: Team) -> Color {
-        isPeer(peer, in: team)
-            ? Color.green.opacity(0.7)
-            : Color.gray.opacity(0.3)
-    }
+    private var readyCount: Int { allPeers.count }
+    private var canStart: Bool { readyCount >= minCount && readyCount <= maxCount }
 
+    // MARK: – Actions
     private func startGame() {
-        let peersToInvite = Array(assignments.keys)
-        gameManager.connectivityManager.invitePeers(peersToInvite)
-        // Convert MCPeerID keys to player ID strings
-        let stringAssignments = assignments.reduce(into: [String: Team]()) { result, entry in
-            result[entry.key.displayName] = entry.value
+        // 1️⃣  Invite everyone visible
+        gameManager.connectivityManager.invitePeers(gameManager.connectivityManager.availablePeers)
+
+        // 2️⃣  Build auto-assignment map
+        var map: [String:Team] = [:]
+        for (index, peer) in allPeers.enumerated() {
+            map[peer.displayName] = (index % 2 == 0) ? .red : .blue
         }
-        gameManager.playerTeamAssignments = stringAssignments
-        gameManager.connectivityManager.sendTeamAssignments(stringAssignments)
-        isPresented = false
+
+        // 3️⃣  Store + broadcast
+        gameManager.playerTeamAssignments = map
+        gameManager.connectivityManager.sendTeamAssignments(map)
+
+        isPresented = false            // dismiss lobby
     }
 
-    private var canStart: Bool {
-        // Ensure each team has at least one assigned peer
-        Team.allCases.allSatisfy { team in
-            assignments.values.contains(team)
-        }
-    }
-
+    // MARK: – UI
     var body: some View {
         NavigationView {
-            VStack {
-                ForEach(Team.allCases, id: \.self) { team in
-                    Text("\(team.rawValue.capitalized) Team")
-                        .font(.headline)
-                        .padding(.top)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack {
-                            // Include the local device first
-                            let allPeers = [gameManager.connectivityManager.myPeerID] + gameManager.connectivityManager.availablePeers
-                            ForEach(allPeers, id: \.self) { peer in
-                                let name = (peer == gameManager.connectivityManager.myPeerID) ? "You" : peer.displayName
-                                
-                                Text(name)
-                                    .padding(8)
-                                    .background(bgColor(for: peer, team: team))
-                                    .cornerRadius(8)
-                                    .onTapGesture {
-                                        if isPeer(peer, in: team) {
-                                            assignments[peer] = nil
-                                        } else {
-                                            assignments[peer] = team
-                                        }
-                                    }
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
+            VStack(spacing: 24) {
+                // live list
+                List(allPeers, id: \.self) { peer in
+                    Text(peer == gameManager.connectivityManager.myPeerID ? "You" : peer.displayName)
                 }
 
-                Spacer()
+                Text("Found \(readyCount) device\(readyCount == 1 ? "" : "s")")
+                    .font(.headline)
+                Text("Need at least \(minCount), up to \(maxCount)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
 
                 Button("Start Game", action: startGame)
-                    .font(.title2)
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth:.infinity)
                     .padding()
-                    .background(canStart ? Color.blue : Color.gray)
+                    .background(canStart ? Color.green : Color.gray)
                     .foregroundColor(.white)
                     .cornerRadius(10)
                     .disabled(!canStart)
-                    .padding()
+                    .padding(.horizontal)
             }
-            .navigationTitle("Assign Teams")
-            .navigationBarItems(trailing: Button("Cancel") {
-                isPresented = false
-            })
+            .navigationTitle("Pair Devices")
+            .navigationBarItems(trailing: Button("Close") { isPresented = false })
         }
     }
 }
