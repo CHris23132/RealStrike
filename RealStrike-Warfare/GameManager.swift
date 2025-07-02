@@ -135,35 +135,9 @@ class GameManager: NSObject, ObservableObject {
         let shooterLoc = locationManager.currentLocation
         let shooterHeading = locationManager.currentHeading?.trueHeading
 
-        // Determine the most likely target using distance, heading, and
-        // the age of the last received location update. Older updates get
-        // penalized to avoid hitting stale players.
-        var best: (player: PlayerData, score: Double)?
-        let now = Date()
-        for p in otherPlayers.values where p.id != localPlayerId {
-            var score = shooterLoc.distance(from: p.location)
-            if let heading = shooterHeading {
-                let bearing = shooterLoc.bearing(to: p.location)
-                let angle = abs(angleDifference(heading, bearing))
-                // Players far from the current aim are less likely targets.
-                score += angle / 10.0 // each 10° ≈ 1m penalty
-            }
-            let age = now.timeIntervalSince(p.lastUpdate)
-            score += age * 0.5 // stale data penalty
-            if best == nil || score < best!.score {
-                best = (p, score)
-            }
-        }
-
-        if best == nil, let peer = connectivityManager.session.connectedPeers.first {
-            let dummy = PlayerData(id: peer.displayName,
-                                   location: shooterLoc,
-                                   heading: 0,
-                                   lastUpdate: Date())
-            best = (dummy, 0)
-        }
-
-        guard let hit = best?.player, !hitHistory.contains(hit.id) else { return }
+        guard let hit = selectTarget(shooterLocation: shooterLoc,
+                                     heading: shooterHeading),
+              !hitHistory.contains(hit.id) else { return }
         strikesGiven += 1
         connectivityManager.sendHit(to: hit.id)
         hitHistory.insert(hit.id)
@@ -178,6 +152,37 @@ class GameManager: NSObject, ObservableObject {
                 self.cameraViewModel.hitBoundingBox = nil
             }
         }
+    }
+
+    /// Chooses the most likely target given the shooter's location and heading.
+    private func selectTarget(shooterLocation: CLLocation,
+                              heading: Double?) -> PlayerData? {
+        var bestPlayer: PlayerData?
+        var bestScore = Double.greatestFiniteMagnitude
+        let now = Date()
+
+        for p in otherPlayers.values where p.id != localPlayerId {
+            var score = shooterLocation.distance(from: p.location)
+            if let h = heading {
+                let bearing = shooterLocation.bearing(to: p.location)
+                let angle = abs(angleDifference(h, bearing))
+                score += angle / 10.0 // penalize off-angle targets
+            }
+            score += now.timeIntervalSince(p.lastUpdate) * 0.5
+            if score < bestScore {
+                bestScore = score
+                bestPlayer = p
+            }
+        }
+
+        if let chosen = bestPlayer { return chosen }
+        if let peer = connectivityManager.session.connectedPeers.first {
+            return PlayerData(id: peer.displayName,
+                              location: shooterLocation,
+                              heading: heading ?? 0,
+                              lastUpdate: Date())
+        }
+        return nil
     }
 
     // MARK: - Respawn Logic
