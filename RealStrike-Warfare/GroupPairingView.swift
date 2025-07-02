@@ -24,7 +24,8 @@ struct GroupPairingView: View {
         // 2️⃣  Build auto-assignment map
         var map: [String:Team] = [:]
         for (index, peer) in allPeers.enumerated() {
-            map[peer.displayName] = (index % 2 == 0) ? .red : .blue
+            let pid = gameManager.connectivityManager.deviceID(for: peer) ?? peer.displayName
+            map[pid] = (index % 2 == 0) ? .red : .blue
         }
 
         // 3️⃣  Store + broadcast

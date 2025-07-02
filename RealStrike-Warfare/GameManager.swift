@@ -42,7 +42,8 @@ class GameManager: NSObject, ObservableObject {
     var playerTeamAssignments: [String: Team] = [:]
 
     // Computed
-    var localPlayerId: String { connectivityManager.myPeerID.displayName }
+    /// Unique identifier for the local device used across the session.
+    var localPlayerId: String { connectivityManager.deviceID }
 
     // MARK: - Private
     private let locationManager = LocationManager()
@@ -177,7 +178,8 @@ class GameManager: NSObject, ObservableObject {
 
         if let chosen = bestPlayer { return chosen }
         if let peer = connectivityManager.session.connectedPeers.first {
-            return PlayerData(id: peer.displayName,
+            let pid = connectivityManager.deviceID(for: peer) ?? peer.displayName
+            return PlayerData(id: pid,
                               location: shooterLocation,
                               heading: heading ?? 0,
                               lastUpdate: Date())
@@ -271,7 +273,8 @@ extension GameManager: ConnectivityDelegate {
     func didReceiveHit(fromPeer peerID: MCPeerID, targetId: String) {
         if targetId == localPlayerId, !isRespawning {
             hitsReceived += 1
-            recordHit(shooterId: peerID.displayName)
+            let shooterId = connectivityManager.deviceID(for: peerID) ?? peerID.displayName
+            recordHit(shooterId: shooterId)
             triggerRespawn()
         }
     }
