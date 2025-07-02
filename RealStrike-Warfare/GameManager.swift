@@ -133,25 +133,34 @@ class GameManager: NSObject, ObservableObject {
 
         fireSoundPlayer?.play()
         let shooterLoc = locationManager.currentLocation
+        let shooterHeading = locationManager.currentHeading?.trueHeading
 
-        // Closest target
-        var target: PlayerData?
-        var minDist = Double.greatestFiniteMagnitude
+        // Determine the most likely target using distance and heading
+        var best: (player: PlayerData, score: Double)?
         for p in otherPlayers.values where p.id != localPlayerId {
-            let d = shooterLoc.distance(from: p.location)
-            if d < minDist {
-                minDist = d
-                target = p
+            let distance = shooterLoc.distance(from: p.location)
+            var score = distance
+            if let heading = shooterHeading {
+                let bearing = shooterLoc.bearing(to: p.location)
+                let angle = abs(angleDifference(heading, bearing))
+                // Weight the angle difference so that players outside the
+                // shooter's field of view are less likely targets.
+                score += angle / 10.0 // each 10° ≈ 1m penalty
+            }
+            if best == nil || score < best!.score {
+                best = (p, score)
             }
         }
-        if target == nil, let peer = connectivityManager.session.connectedPeers.first {
-            target = PlayerData(id: peer.displayName,
-                                 location: shooterLoc,
-                                 heading: 0,
-                                 lastUpdate: Date())
+
+        if best == nil, let peer = connectivityManager.session.connectedPeers.first {
+            let dummy = PlayerData(id: peer.displayName,
+                                   location: shooterLoc,
+                                   heading: 0,
+                                   lastUpdate: Date())
+            best = (dummy, 0)
         }
 
-        guard let hit = target, !hitHistory.contains(hit.id) else { return }
+        guard let hit = best?.player, !hitHistory.contains(hit.id) else { return }
         strikesGiven += 1
         connectivityManager.sendHit(to: hit.id)
         hitHistory.insert(hit.id)
