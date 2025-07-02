@@ -18,6 +18,17 @@ protocol ConnectivityDelegate: AnyObject {
 }
 
 class ConnectivityManager: NSObject, ObservableObject {
+    /// Stable unique identifier for this device used in game logic.
+    let deviceID: String = {
+        if let saved = UserDefaults.standard.string(forKey: "rs_device_id") {
+            return saved
+        } else {
+            let id = UUID().uuidString
+            UserDefaults.standard.set(id, forKey: "rs_device_id")
+            return id
+        }
+    }()
+
     let myPeerID = MCPeerID(displayName: UIDevice.current.name)
     private(set) var session: MCSession!
     
@@ -27,6 +38,9 @@ class ConnectivityManager: NSObject, ObservableObject {
     
     // List of discovered peers available for pairing.
     @Published var availablePeers: [MCPeerID] = []
+
+    /// Mapping of connected peer IDs to their announced unique device IDs.
+    private(set) var peerDeviceIDs: [MCPeerID: String] = [:]
     
     weak var delegate: ConnectivityDelegate?
     
@@ -143,6 +157,11 @@ class ConnectivityManager: NSObject, ObservableObject {
         let vc = MCBrowserViewController(serviceType: serviceType, session: session)
         return vc
     }
+
+    /// Returns the known unique device ID for a given peer if available.
+    func deviceID(for peer: MCPeerID) -> String? {
+        return peerDeviceIDs[peer]
+    }
 }
 
 // MARK: - MCNearbyServiceAdvertiserDelegate
@@ -215,6 +234,7 @@ extension ConnectivityManager: MCSessionDelegate {
                                         heading: heading,
                                         lastUpdate: Date(timeIntervalSince1970: timestamp))
             DispatchQueue.main.async {
+                self.peerDeviceIDs[peerID] = id
                 self.delegate?.didReceivePlayerData(playerData)
             }
         } else if action == "assignTeams",
